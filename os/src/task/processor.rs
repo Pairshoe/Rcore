@@ -12,6 +12,9 @@ use crate::sync::UPSafeCell;
 use crate::trap::TrapContext;
 use alloc::sync::Arc;
 use lazy_static::*;
+use crate::config::MAX_SYSCALL_NUM;
+use crate::mm::{MapPermission, VirtAddr};
+use crate::timer::get_time_us;
 
 /// Processor management structure
 pub struct Processor {
@@ -57,6 +60,10 @@ pub fn run_tasks() {
             let mut task_inner = task.inner_exclusive_access();
             let next_task_cx_ptr = &task_inner.task_cx as *const TaskContext;
             task_inner.task_status = TaskStatus::Running;
+            if task_inner.task_begin_time == 0 {
+                let us = get_time_us();
+                task_inner.task_begin_time = ((us / 1_000_000) & 0xffff) * 1_000 + ((us % 1_000_000) / 1_000);
+            }
             drop(task_inner);
             // release coming task TCB manually
             processor.current = Some(task);
@@ -92,6 +99,48 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
         .unwrap()
         .inner_exclusive_access()
         .get_trap_cx()
+}
+
+/// Get begin time of current task
+pub fn current_begin_time() -> usize {
+    let task = current_task().unwrap();
+    let begin_time = task.inner_exclusive_access().get_begin_time();
+    begin_time
+}
+
+/// Get syscall times of current task
+pub fn current_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
+    let task = current_task().unwrap();
+    let syscall_times = task.inner_exclusive_access().get_syscall_times();
+    syscall_times
+}
+
+/// Update syscall times of current task
+pub fn update_current_syscall_times(syscall_id: usize) {
+    let task = current_task().unwrap();
+    let mut task_inner = task.inner_exclusive_access();
+    task_inner.task_syscall_times[syscall_id] += 1;
+}
+
+/// Set priority of current task
+pub fn set_current_priority(priority: usize) {
+    let task = current_task().unwrap();
+    let mut task_inner = task.inner_exclusive_access();
+    task_inner.task_priority = priority;
+}
+
+/// Insert a framed map area into current task's memory set
+pub fn insert_current_memory_set(start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) -> isize {
+    let task = current_task().unwrap();
+    let mut task_inner = task.inner_exclusive_access();
+    task_inner.memory_set.insert_framed_area(start_va, end_va, permission)
+}
+
+/// Remove a framed map area from current task's memory set
+pub fn remove_current_memory_set(start_va: VirtAddr, end_va: VirtAddr) -> isize {
+    let task = current_task().unwrap();
+    let mut task_inner = task.inner_exclusive_access();
+    task_inner.memory_set.remove_framed_area(start_va, end_va)
 }
 
 /// Return to idle control flow for new scheduling

@@ -6,12 +6,12 @@
 
 use super::TaskControlBlock;
 use crate::sync::UPSafeCell;
-use alloc::collections::VecDeque;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use lazy_static::*;
 
 pub struct TaskManager {
-    ready_queue: VecDeque<Arc<TaskControlBlock>>,
+    ready_queue: Vec<Arc<TaskControlBlock>>,
 }
 
 // YOUR JOB: FIFO->Stride
@@ -19,16 +19,28 @@ pub struct TaskManager {
 impl TaskManager {
     pub fn new() -> Self {
         Self {
-            ready_queue: VecDeque::new(),
+            ready_queue: Vec::new(),
         }
     }
     /// Add process back to ready queue
     pub fn add(&mut self, task: Arc<TaskControlBlock>) {
-        self.ready_queue.push_back(task);
+        self.ready_queue.push(task);
     }
     /// Take a process out of the ready queue
     pub fn fetch(&mut self) -> Option<Arc<TaskControlBlock>> {
-        self.ready_queue.pop_front()
+        let mut min_stride = 0xffff_ffff_ffff_ffffusize;
+        let mut res = 0;
+        for (idx, task) in self
+            .ready_queue
+            .iter()
+            .enumerate() {
+            if task.inner_exclusive_access().task_stride < min_stride {
+                res = idx;
+                min_stride = task.inner_exclusive_access().task_stride;
+            }
+        }
+        self.ready_queue[res].inner_exclusive_access().update_stride();
+        Some(self.ready_queue.remove(res))
     }
 }
 

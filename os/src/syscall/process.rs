@@ -1,16 +1,16 @@
 //! Process management syscalls
-
-use crate::mm::{translated_refmut, translated_ref, translated_str};
-use crate::task::{
-    add_task, current_task, current_user_token, exit_current_and_run_next,
-    suspend_current_and_run_next, TaskStatus,
-};
+use crate::mm::{translated_refmut, translated_ref, translated_str, translated_byte_buffer, VirtAddr, MapPermission};
+use crate::task::{add_task, current_begin_time, current_syscall_times, current_task, current_user_token,
+                  exit_current_and_run_next, insert_current_memory_set, remove_current_memory_set, set_current_priority,
+                  suspend_current_and_run_next, TaskStatus};
 use crate::fs::{open_file, OpenFlags};
 use crate::timer::get_time_us;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use crate::config::MAX_SYSCALL_NUM;
 use alloc::string::String;
+use core::mem;
+use core::mem::size_of;
 
 #[repr(C)]
 #[derive(Debug)]
@@ -83,8 +83,7 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
     if !inner
         .children
         .iter()
-        .any(|p| pid == -1 || pid as usize == p.getpid())
-    {
+        .any(|p| pid == -1 || pid as usize == p.getpid()) {
         return -1;
         // ---- release current PCB
     }
@@ -112,37 +111,77 @@ pub fn sys_waitpid(pid: isize, exit_code_ptr: *mut i32) -> isize {
 // YOUR JOB: 引入虚地址后重写 sys_get_time
 pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     let _us = get_time_us();
-    // unsafe {
-    //     *ts = TimeVal {
-    //         sec: us / 1_000_000,
-    //         usec: us % 1_000_000,
-    //     };
-    // }
+    let dsts = translated_byte_buffer(current_user_token(), _ts as *mut u8, size_of::<TimeVal>());
+    unsafe {
+        let src = mem::transmute::<TimeVal, [u8; 16]>(TimeVal {
+            sec: _us / 1_000_000,
+            usec: _us % 1_000_000,
+        });
+        for dst in dsts {
+            dst.copy_from_slice(&src);
+        }
+    }
     0
 }
 
 // YOUR JOB: 引入虚地址后重写 sys_task_info
-pub fn sys_task_info(ti: *mut TaskInfo) -> isize {
-    -1
+pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
+    let _us = get_time_us();
+    let _now = ((_us / 1_000_000) & 0xffff) * 1000 + ((_us % 1_000_000) / 1000);
+    let dsts = translated_byte_buffer(current_user_token(), _ti as *mut u8, size_of::<TaskInfo>());
+    unsafe {
+        let src = mem::transmute::<TaskInfo, [u8; 2016]>(TaskInfo {
+            status: TaskStatus::Running,
+            syscall_times: current_syscall_times(),
+            time: _now - current_begin_time(),
+        });
+        for dst in dsts {
+            dst.copy_from_slice(&src);
+        }
+    }
+    0
 }
 
 // YOUR JOB: 实现sys_set_priority，为任务添加优先级
 pub fn sys_set_priority(_prio: isize) -> isize {
+    if 2 <= _prio {
+        set_current_priority(_prio as usize);
+        return _prio;
+    }
     -1
 }
 
 // YOUR JOB: 扩展内核以实现 sys_mmap 和 sys_munmap
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
+    let va = VirtAddr::from(_start);
+    if va.page_offset() == 0 && _port & !0x7 == 0 && _port & 0x7 != 0 {
+        let permission = MapPermission::from_bits((_port << 1 | 1 << 4) as u8).unwrap();
+        if insert_current_memory_set(_start.into(), (_start + _len).into(), permission) == 0 {
+            return 0;
+        }
+    }
     -1
 }
 
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
-    -1
+    remove_current_memory_set(_start.into(), (_start + _len).into())
 }
 
-//
 // YOUR JOB: 实现 sys_spawn 系统调用
 // ALERT: 注意在实现 SPAWN 时不需要复制父进程地址空间，SPAWN != FORK + EXEC 
 pub fn sys_spawn(_path: *const u8) -> isize {
-    -1
+    let token = current_user_token();
+    let path = translated_str(token, _path);
+    if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
+        let all_data = app_inode.read_all();
+        let task = current_task().unwrap();
+        let new_task = task.spawn(all_data.as_slice());
+        let new_pid = new_task.pid.0;
+        let trap_cx = new_task.inner_exclusive_access().get_trap_cx();
+        trap_cx.x[10] = 0;
+        add_task(new_task);
+        new_pid as isize
+    } else {
+        -1
+    }
 }
