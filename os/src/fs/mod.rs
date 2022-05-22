@@ -7,6 +7,11 @@ use crate::mm::UserBuffer;
 pub trait File : Send + Sync {
     fn readable(&self) -> bool;
     fn writable(&self) -> bool;
+    fn get_ino(&self) -> u32;
+    fn get_mode(&self) -> StatMode;
+    fn get_nlink(&self, target_block_id: u32, target_block_offset: usize) -> u32;
+    fn get_block_id(&self) -> u32;
+    fn get_block_offset(&self) -> usize;
     fn read(&self, buf: UserBuffer) -> usize;
     fn write(&self, buf: UserBuffer) -> usize;
 }
@@ -24,7 +29,7 @@ pub struct Stat {
     /// number of hard links
     pub nlink: u32,
     /// unused pad
-    pad: [u64; 7],
+    pub pad: [u64; 7],
 }
 
 bitflags! {
@@ -37,7 +42,7 @@ bitflags! {
         /// ordinary regular file
         const FILE  = 0o100000;
     }
-}    
+}
 
 pub use stdio::{Stdin, Stdout};
-pub use inode::{OSInode, open_file, OpenFlags, list_apps};
+pub use inode::{OSInode, open_file, link_file, unlink_file, get_nlink, OpenFlags, list_apps};

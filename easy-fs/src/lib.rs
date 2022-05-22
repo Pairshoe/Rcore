@@ -1,6 +1,7 @@
 #![no_std]
 
 extern crate alloc;
+extern crate log;
 
 mod block_dev;
 mod layout;

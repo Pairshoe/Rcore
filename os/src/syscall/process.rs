@@ -1,14 +1,12 @@
 //! Process management syscalls
-use crate::mm::{translated_refmut, translated_ref, translated_str, translated_byte_buffer, VirtAddr, MapPermission};
+use crate::mm::{translated_refmut, translated_str, translated_byte_buffer, VirtAddr, MapPermission};
 use crate::task::{add_task, current_begin_time, current_syscall_times, current_task, current_user_token,
                   exit_current_and_run_next, insert_current_memory_set, remove_current_memory_set, set_current_priority,
                   suspend_current_and_run_next, TaskStatus};
 use crate::fs::{open_file, OpenFlags};
 use crate::timer::get_time_us;
 use alloc::sync::Arc;
-use alloc::vec::Vec;
 use crate::config::MAX_SYSCALL_NUM;
-use alloc::string::String;
 use core::mem;
 use core::mem::size_of;
 

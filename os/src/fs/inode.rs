@@ -8,6 +8,7 @@ use alloc::sync::Arc;
 use lazy_static::*;
 use bitflags::*;
 use alloc::vec::Vec;
+use crate::fs::{StatMode};
 use super::File;
 use crate::mm::UserBuffer;
 
@@ -64,6 +65,10 @@ lazy_static! {
         let efs = EasyFileSystem::open(BLOCK_DEVICE.clone());
         Arc::new(EasyFileSystem::root_inode(&efs))
     };
+}
+
+pub fn get_nlink(target_block_id: u32, target_block_offset: usize) -> u32 {
+    ROOT_INODE.get_nlink(target_block_id, target_block_offset)
 }
 
 /// List all files in the filesystems
@@ -139,9 +144,49 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
     }
 }
 
+pub fn link_file(old_name: &str, new_name: &str) -> isize {
+    if let Some(mut old_inode) = ROOT_INODE.find(old_name) {
+        let old_ino = old_inode.get_ino() as u32;
+        return ROOT_INODE.link(old_ino, new_name);
+    }
+    -1
+}
+
+pub fn unlink_file(_name: &str) -> isize {
+    ROOT_INODE.unlink(_name)
+}
+
 impl File for OSInode {
     fn readable(&self) -> bool { self.readable }
     fn writable(&self) -> bool { self.writable }
+    fn get_ino(&self) -> u32 {
+        let inner = self.inner.exclusive_access();
+        inner.inode.get_ino()
+    }
+    fn get_mode(&self) -> StatMode {
+        let inner = self.inner.exclusive_access();
+        let mut mode = StatMode::NULL;
+        if inner.inode.get_mode() == 0 {
+            mode = StatMode::NULL;
+        } else if inner.inode.get_mode() == 1 {
+            mode = StatMode::DIR;
+        } else {
+            mode = StatMode::FILE;
+        }
+        mode
+    }
+    fn get_nlink(&self, target_block_id: u32, target_block_offset: usize) -> u32 {
+        let inner = self.inner.exclusive_access();
+        inner.inode.get_nlink(target_block_id, target_block_offset)
+    }
+    fn get_block_id(&self) -> u32 {
+        let inner = self.inner.exclusive_access();
+        inner.inode.get_block_id()
+    }
+    fn get_block_offset(&self) -> usize {
+        let inner = self.inner.exclusive_access();
+        inner.inode.get_block_offset()
+    }
     fn read(&self, mut buf: UserBuffer) -> usize {
         let mut inner = self.inner.exclusive_access();
         let mut total_read_size = 0usize;

@@ -1,3 +1,4 @@
+use crate::fs::{StatMode};
 use super::File;
 use crate::mm::{UserBuffer};
 use crate::sbi::console_getchar;
@@ -11,6 +12,11 @@ pub struct Stdout;
 impl File for Stdin {
     fn readable(&self) -> bool { true }
     fn writable(&self) -> bool { false }
+    fn get_ino(&self) -> u32 { 0 }
+    fn get_mode(&self) -> StatMode { StatMode::NULL }
+    fn get_nlink(&self, target_block_id: u32, target_block_offset: usize) -> u32 { 0 }
+    fn get_block_id(&self) -> u32 { 0 }
+    fn get_block_offset(&self) -> usize { 0 }
     fn read(&self, mut user_buf: UserBuffer) -> usize {
         assert_eq!(user_buf.len(), 1);
         // busy loop
@@ -36,6 +42,11 @@ impl File for Stdin {
 impl File for Stdout {
     fn readable(&self) -> bool { false }
     fn writable(&self) -> bool { true }
+    fn get_ino(&self) -> u32 { 0 }
+    fn get_mode(&self) -> StatMode { StatMode::NULL }
+    fn get_nlink(&self, target_block_id: u32, target_block_offset: usize) -> u32 { 0 }
+    fn get_block_id(&self) -> u32 { 0 }
+    fn get_block_offset(&self) -> usize { 0 }
     fn read(&self, _user_buf: UserBuffer) -> usize{
         panic!("Cannot read from stdout!");
     }

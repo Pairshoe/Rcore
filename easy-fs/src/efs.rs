@@ -17,8 +17,8 @@ pub struct EasyFileSystem {
     pub block_device: Arc<dyn BlockDevice>,
     pub inode_bitmap: Bitmap,
     pub data_bitmap: Bitmap,
-    inode_area_start_block: u32,
-    data_area_start_block: u32,
+    pub inode_area_start_block: u32,
+    pub data_area_start_block: u32,
 }
 
 /// A data block of block size
