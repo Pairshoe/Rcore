@@ -119,14 +119,10 @@ impl Inode {
     }
     /// unlink a file
     pub fn unlink(&self, name: &str) -> isize {
-        let mut flag = false;
         if let Some(inode) = self.find(name) {
             if self.get_nlink(inode.block_id as u32, inode.block_offset) == 1 {
                 inode.clear();
-                return 0;
             }
-        } else {
-            return -1;
         }
         self.modify_disk_inode(|root_inode| {
             assert!(root_inode.is_dir());
@@ -148,17 +144,12 @@ impl Inode {
                         empty_dirent.as_bytes(),
                         &self.block_device,
                     );
-                    flag = true;
                     break;
                 }
             }
         });
         block_cache_sync_all();
-        if flag == true {
-            0
-        } else {
-            -1
-        }
+        0
     }
 
     /// Call a function over a disk inode to read it
