@@ -42,4 +42,21 @@ impl Semaphore {
             block_current_and_run_next();
         }
     }
+
+    pub fn get_waking_tid(&self) -> isize {
+        let inner = self.inner.exclusive_access();
+        if inner.wait_queue.is_empty() {
+            -1
+        } else {
+            inner.wait_queue
+                .front()
+                .unwrap()
+                .inner_exclusive_access()
+                .res
+                .as_ref()
+                .unwrap()
+                .tid as isize
+        }
+    }
+
 }

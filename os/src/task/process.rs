@@ -30,6 +30,16 @@ pub struct ProcessControlBlockInner {
     pub mutex_list: Vec<Option<Arc<dyn Mutex>>>,
     pub semaphore_list: Vec<Option<Arc<Semaphore>>>,
     pub condvar_list: Vec<Option<Arc<Condvar>>>,
+    // deadlock detection
+    pub is_enable_deadlock_detect: bool,
+    // mutex deadlock detection
+    pub mutex_available: Vec<usize>,
+    pub mutex_allocation: Vec<Vec<usize>>,
+    pub mutex_need: Vec<Vec<usize>>,
+    // semaphore deadlock detection
+    pub semaphore_available: Vec<usize>,
+    pub semaphore_allocation: Vec<Vec<usize>>,
+    pub semaphore_need: Vec<Vec<usize>>,
 }
 
 impl ProcessControlBlockInner {
@@ -97,6 +107,13 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    is_enable_deadlock_detect: false,
+                    mutex_available: Vec::new(),
+                    mutex_allocation: Vec::new(),
+                    mutex_need: Vec::new(),
+                    semaphore_available: Vec::new(),
+                    semaphore_allocation: Vec::new(),
+                    semaphore_need: Vec::new(),
                 })
             },
         });
@@ -122,6 +139,12 @@ impl ProcessControlBlock {
         // add main thread to the process
         let mut process_inner = process.inner_exclusive_access();
         process_inner.tasks.push(Some(Arc::clone(&task)));
+        // add new thread mutex properties to main process
+        process_inner.mutex_allocation.push(Vec::new());
+        process_inner.mutex_need.push(Vec::new());
+        // add new thread semaphore properties to main process
+        process_inner.semaphore_allocation.push(Vec::new());
+        process_inner.semaphore_need.push(Vec::new());
         drop(process_inner);
         // add main thread to scheduler
         add_task(task);
@@ -218,6 +241,13 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    is_enable_deadlock_detect: false,
+                    mutex_available: Vec::new(),
+                    mutex_allocation: Vec::new(),
+                    mutex_need: Vec::new(),
+                    semaphore_available: Vec::new(),
+                    semaphore_allocation: Vec::new(),
+                    semaphore_need: Vec::new(),
                 })
             },
         });
@@ -240,6 +270,12 @@ impl ProcessControlBlock {
         // attach task to child process
         let mut child_inner = child.inner_exclusive_access();
         child_inner.tasks.push(Some(Arc::clone(&task)));
+        // add new thread mutex properties to child process
+        child_inner.mutex_allocation.push(Vec::new());
+        child_inner.mutex_need.push(Vec::new());
+        // add new thread semaphore properties to child process
+        child_inner.semaphore_allocation.push(Vec::new());
+        child_inner.semaphore_need.push(Vec::new());
         drop(child_inner);
         // modify kernel_stack_top in trap_cx of this thread
         let task_inner = task.inner_exclusive_access();
@@ -272,6 +308,13 @@ impl ProcessControlBlock {
                     mutex_list: Vec::new(),
                     semaphore_list: Vec::new(),
                     condvar_list: Vec::new(),
+                    is_enable_deadlock_detect: false,
+                    mutex_available: Vec::new(),
+                    mutex_allocation: Vec::new(),
+                    mutex_need: Vec::new(),
+                    semaphore_available: Vec::new(),
+                    semaphore_allocation: Vec::new(),
+                    semaphore_need: Vec::new(),
                 })
             },
         });
